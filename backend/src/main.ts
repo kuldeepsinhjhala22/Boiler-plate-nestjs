@@ -12,38 +12,55 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
 
-  // Security headers
-  app.use(helmet());
-
   // Gzip compression
   app.use(compression());
 
   // Global validation pipe
-  // This automatically validates every incoming request body
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,        // strips fields not in DTO
-      forbidNonWhitelisted: true, // throws error if extra fields sent
-      transform: true,        // auto-converts types (string "1" → number 1)
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
 
   // CORS — allow frontend to call API
   app.enableCors({
-    origin: ['http://localhost:3001'],
+    origin: ['http://localhost:3001', 'http://localhost:3000'],
     credentials: true,
   });
 
-  // Swagger API docs
+  // Swagger API docs — must be set up BEFORE helmet
   const config = new DocumentBuilder()
     .setTitle('MyApp API')
     .setDescription('Production-ready REST API')
     .setVersion('1.0')
-    .addBearerAuth()
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        in: 'header',
+      },
+      'access-token',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
+
+  // Security headers — after Swagger setup
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
   await app.listen(port);
 
